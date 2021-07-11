@@ -1,4 +1,4 @@
-import os
+import utils
 import cv2
 import numpy as np
 
@@ -33,7 +33,7 @@ class PerspectiveProjector:
     def distort_point_vectorized(self, P):
         principle = np.array([self.K[0, 2], self.K[1, 2]])
         P = np.asarray(P)
-        R_2 = np.sum(np.multiply(P - principle, P - principle), axis=0)
+        R_2 = np.sum(np.multiply(P - principle, P - principle), axis=1).reshape((-1, 1))
         P_d = np.multiply((1 + self.D[0] * R_2 + self.D[1] * R_2**2), (P - principle)) + principle
         return P_d
 
@@ -55,57 +55,22 @@ class PerspectiveProjector:
     def undistort_image_vectorized(self, img):
         gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         [h, w] = gray_img.shape
-        undistort_img = np.zeros(gray_img.shape, dtype=np.uint8)
-        P_img = []
-        P_arr = []
+        undistort_img = np.zeros(gray_img.shape, dtype=np.uint8).reshape((1, -1))
+        P = []
         for j in range(w):
             for i in range(h):
-                P_img.append([j, i])
-                P_arr.append([i, j])
+                P.append([j, i])
+        P = np.asarray(P)
+        P_d = self.distort_point_vectorized(P)
+        P_d = np.rint(P_d).astype(np.uint32)
+        flatted_P_d = P_d[:, 0] + P_d[:, 1] * w
+        flatted_P = P[:, 0] + P[:, 1] * w
+        resized_img = np.resize(gray_img, (1, h*w))
+        print(flatted_P_d.shape)
+        undistort_img[0, flatted_P] = resized_img[0, flatted_P_d]
+        return cv2.cvtColor(undistort_img.reshape((h, w)), cv2.COLOR_GRAY2BGR)
 
-        P_d = self.distort_point_vectorized(P_img)
-        P_d = np.rint(P_d)
-        flatted_P_d = P_d[0] + P_d[1] * w
-        resized_img = np.resize(gray_img, (h*w, 1))
-        undistort_img[P_d] = resized_img[flatted_P_d]
-        # undistort_img[i, j, :] = img[v, u, :]
 
-        return undistort_img
-
-def generate_corner_points(square_size=0.04, board_size=(6, 9)):
-    points = []
-    for w in range(board_size[0]):
-        for h in range(board_size[1]):
-            points.append([h * square_size, w * square_size, 0])
-    return points
-
-def get_rotation_matrix_from_angles(angles):
-    w = np.asarray(angles).T
-    theta = np.linalg.norm(w)
-    k = w / theta
-    k_cross = np.mat([[0, -k[2], k[1]],
-                      [k[2], 0, -k[0]],
-                      [-k[1], k[0], 0]])
-    R = np.eye(3) + np.sin(theta) * k_cross + (1 - np.cos(theta)) * (k_cross * k_cross)
-    return R
-
-def draw_cube(img, corners):
-
-    edges = ((0, 1), (0, 2), (1, 3), (2, 3),
-             (4, 5), (4, 6), (5, 7), (6, 7),
-             (0, 4), (1, 5), (2, 6), (3, 7))
-    for (p1, p2) in edges:
-        cv2.line(img, corners[p1], corners[p2], color=(0, 0, 255), thickness=2)
-
-def read_params_from_txt(K_file, D_file):
-    K, D = [], []
-    with open(K_file) as f:
-        for line in f.readlines():
-            K.append([float(i) for i in line.strip().split(' ') if i])
-    with open(D_file) as f:
-        for line in f.readlines():
-            D = [float(i) for i in line.strip().split(' ') if i]
-    return K, D
 
 
 if __name__ == '__main__':
@@ -123,7 +88,7 @@ if __name__ == '__main__':
     undistort_img = cv2.imread(undistort_img_file)
     distort_img = cv2.imread(distort_img_file)
 
-    K, D = read_params_from_txt(K_file, D_file)
+    K, D = utils.read_params_from_txt(K_file, D_file)
     angles = None
     t = None
 
@@ -132,10 +97,10 @@ if __name__ == '__main__':
         angles = [float(i) for i in line[:3]]
         t = [float(i) for i in line[3:]]
 
-    R = get_rotation_matrix_from_angles(angles)
+    R = utils.get_rotation_matrix_from_angles(angles)
 
     projector = PerspectiveProjector(K, D)
-    pw_points = generate_corner_points()
+    pw_points = utils.generate_corner_points()
 
     # show chessboard corners 1
     for p in pw_points:
@@ -156,12 +121,12 @@ if __name__ == '__main__':
     pixel_cube_corners = []
     for c in cube_corners:
         pixel_cube_corners.append(projector.perspective_projection(R, t, c))
-    draw_cube(undistort_img, pixel_cube_corners)
+    utils.draw_cube(undistort_img, pixel_cube_corners)
 
 
-    cv2.imshow("distort_img", distort_img)
-    cv2.imshow("undistort_img", undistort_img)
-    cv2.waitKey(0)
+    # cv2.imshow("distort_img", distort_img)
+    # cv2.imshow("undistort_img", undistort_img)
+    # cv2.waitKey(0)
 
     # ----------------- Part II ------------------- #
 
@@ -170,7 +135,7 @@ if __name__ == '__main__':
         img_p1 = projector.distort_point(img_p).astype('int')
         cv2.circle(distort_img, img_p1, radius=3, color=(0, 0, 255), thickness=-1)
 
-    corrected_img = projector.undistort_image(distort_img)
+    corrected_img = projector.undistort_image_vectorized(distort_img)
     cv2.imshow("corrected_img", corrected_img)
     cv2.waitKey(0)
 
