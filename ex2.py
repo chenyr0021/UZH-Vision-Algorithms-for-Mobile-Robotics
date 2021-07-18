@@ -50,29 +50,6 @@ def inverse_M(M):
     return np.concatenate([R, t], axis=1)
 
 
-# def fig2data(fig):
-#     """
-#     fig = plt.figure()
-#     image = fig2data(fig)
-#     @brief Convert a Matplotlib figure to a 4D numpy array with RGBA channels and return it
-#     @param fig a matplotlib figure
-#     @return a numpy 3D array of RGBA values
-#     """
-#     import PIL.Image as Image
-#     # draw the renderer
-#     fig.canvas.draw()
-#
-#     # Get the RGBA buffer from the figure
-#     w, h = fig.canvas.get_width_height()
-#     buf = np.fromstring(fig.canvas.tostring_argb(), dtype=np.uint8)
-#     buf.shape = (w, h, 4)
-#
-#     # canvas.tostring_argb give pixmap in ARGB mode. Roll the ALPHA channel to have it in RGBA mode
-#     buf = np.roll(buf, 3, axis=2)
-#     image = Image.frombytes("RGBA", (w, h), buf.tostring())
-#     image = np.asarray(image)
-
-
 if __name__ == '__main__':
     root = "C:\\Users\\narwal.DESKTOP-932GS5J"
     # root = "E:\chenyr"
