@@ -132,7 +132,7 @@ def match_SIFT_descriptors(des1, des2, max_ratio):
     
     vice_min_dis = np.min(distance, axis=-1)
     print(min_dis / vice_min_dis)
-    # min_dis_ind[min_dis / vice_min_dis > max_ratio] = -1
+    min_dis_ind[min_dis / vice_min_dis > max_ratio] = -1
     
     unique_ind = np.ones(min_dis_ind.shape, dtype=np.int) * (-1)
     _, w = np.unique(min_dis_ind, return_index=True)
