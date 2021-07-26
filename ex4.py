@@ -15,19 +15,26 @@ from scipy.spatial.distance import cdist
 def Guassian_blur_images(img, sigma0, S):
     h, w = img.shape
     blurred_imgs = np.zeros(( S + 3, h, w))
-    for s in range(-1, S + 2):
+    for i in range(S + 3):
+        s = i - 1
         sigma = np.power(2, s/S) * sigma0
         blurred_img = cv2.GaussianBlur(img, ksize=(0, 0), sigmaX=sigma, borderType=cv2.BORDER_DEFAULT)
-        blurred_imgs[s, :, :] = blurred_img
+        blurred_imgs[i, :, :] = blurred_img
         # print("guassian.shape: ", blurred_imgs.shape)
+        # cv2.imshow("a%d"%s, blurred_img)
+    # cv2.waitKey(0)
     return blurred_imgs
 
 def DoG(blurred_imgs):
     s, h, w = blurred_imgs.shape
-    shifted_imgs = np.concatenate([blurred_imgs[1:, :, :], np.zeros((1, h, w))], axis=0)
-    dog = (shifted_imgs - blurred_imgs)[:-1, :, :]
+    # shifted_imgs = np.concatenate([blurred_imgs[1:, :, :], np.zeros((1, h, w))], axis=0)
+    dog = blurred_imgs[1:, :, :] - blurred_imgs[:-1, :, :]
     # print("dog.shape", dog.shape)
-    return dog
+    # for i in range(s-1):
+    #     show = cv2.normalize(dog[i, :, :], None, 0, 255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8UC1)
+    #     cv2.imshow("a%d"%i, show)
+    # cv2.waitKey(0)
+    return np.abs(dog)
 
 def DoG_pyramid(src, octave, scale, sigma0):
     h, w = src.shape
@@ -57,20 +64,19 @@ def get_local_extremas(pyramid, thresh, descriptor_rad):
             maximum = maximum_filter(maximum, (descriptor_rad, descriptor_rad))
             ext = np.abs(maximum - dog[i, :, :]) < 1e-5
             ext *= np.abs(maximum) > 1e-5
-            coords = np.argwhere(ext[descriptor_rad:-descriptor_rad, descriptor_rad:-descriptor_rad] == 1)
-            # coords[:, 0] = (coords[:, 0] + 1) * np.power(2, octave) - 1
-            # coords[:, 1] = (coords[:, 1] + 1) * np.power(2, octave) - 1
-            # print(np.sum(np.array(ext, dtype=np.int)), h * w)
-            # cv2.imshow("b", np.array(ext, dtype=np.float) * 255)
-            # cv2.waitKey(0)
+            coords = np.argwhere(ext == 1)
             cur_octave_extrema.append(coords)
+        #     cv2.imshow("b%d"%i, np.array(ext, dtype=np.float) * 255)
+        # cv2.waitKey(0)
         extrema.append(cur_octave_extrema)
     return extrema
 
 def generate_descriptors(Gau_pyramid, extrema_loc):
     Gaussian_kernel = cv2.getGaussianKernel(16, 1.5 * 16)
+    Gaussian_kernel = Gaussian_kernel * Gaussian_kernel.T
     descriptors = []
     for octave in range(len(extrema_loc)):
+        s, h, w = Gau_pyramid[octave].shape
         for scale in range(len(extrema_loc[0])):
             dx, dy = cv2.spatialGradient((Gau_pyramid[octave][scale-1, :, :] * 255).astype('uint8'))
             # change to np.int to avoid overflow
@@ -80,31 +86,15 @@ def generate_descriptors(Gau_pyramid, extrema_loc):
             # print(dx.shape)
             for (x, y) in extrema_loc[octave][scale]:
                 # print(x, y)
-                weighted_norm_patch = norm[x-7:x+9, y-7:y+9] * Gaussian_kernel
-                # get angle and transform to (0, 2*pi)
-                gradient_angle = np.arctan2(dy[x-7:x+9, y-7:y+9], dx[x-7:x+9, y-7:y+9]) + np.pi
-                # print(gradient_angle)
-                # exit()
-                descriptors.append(gradient_histogram(gradient_angle, weighted_norm_patch))
+                if 7 <= x < h-9 and 7 <= y < w-9:
+                    weighted_norm_patch = norm[x-7:x+9, y-7:y+9] * Gaussian_kernel
+                    # get angle and transform to (0, 2*pi)
+                    gradient_angle = np.arctan2(dy[x-7:x+9, y-7:y+9], dx[x-7:x+9, y-7:y+9]) + np.pi
+                    # print(gradient_angle)
+                    # exit()
+                    descriptors.append(gradient_histogram(gradient_angle, weighted_norm_patch))
                 
     return np.asarray(descriptors)
-    
-def match_SIFT_descriptors(des1, des2, max_ratio):
-    distance = cdist(des1, des2)
-    print(distance.shape)
-    min_dis = np.min(distance, axis=-1)
-    min_dis_ind = np.argmin(distance, axis=-1)
-    distance[min_dis_ind] = 0
-    
-    vice_min_dis = np.min(distance, axis=-1)
-    min_dis_ind[min_dis/vice_min_dis > max_ratio] = -1
-    
-    unique_ind = np.zeros(min_dis_ind.shape, dtype=np.int)
-    _, w = np.unique(min_dis_ind, return_index=True)
-    unique_ind[w] = min_dis_ind[w]
-    return unique_ind
-    
-    
                 
 def gradient_histogram(gradient_angles, weighted_norm):
     # divide to 4 * 4 cells
@@ -118,25 +108,43 @@ def gradient_histogram(gradient_angles, weighted_norm):
             HoG, _ = np.histogram(cell, bins, weights=norm_cell)
             normalized_HoG = HoG / (np.linalg.norm(HoG) + 1e-5)
             # print(HoG)
-            # exit()
             descriptor[i//4, j//4, :] = normalized_HoG
-    return np.resize(descriptor, (-1,))
+    return np.resize(descriptor, (128,))
     
 def restore_keypoints_position(extrema_loc):
     image_points = []
     for octave in range(len(extrema_loc)):
         for scale in range(len(extrema_loc[0])):
             for (x, y) in extrema_loc[octave][scale]:
-                image_points.append([(x + 1) * np.power(2, octave) - 1, (y + 1) * np.power(2, octave) - 1])
+                image_points.append(((x + 1) * np.power(2, octave) - 1, (y + 1) * np.power(2, octave) - 1))
     return image_points
 
+
+def match_SIFT_descriptors(des1, des2, max_ratio):
+    distance = cdist(des1, des2)
+    min_dis = np.min(distance, axis=-1)
+    print(min_dis.shape)
+    min_dis_ind = np.argmin(distance, axis=-1)
+    # print(min_dis)
+    # print(min_dis_ind)
+    for (i, j) in enumerate(min_dis_ind):
+        distance[i, j] = np.inf
+    
+    vice_min_dis = np.min(distance, axis=-1)
+    print(min_dis / vice_min_dis)
+    # min_dis_ind[min_dis / vice_min_dis > max_ratio] = -1
+    
+    unique_ind = np.ones(min_dis_ind.shape, dtype=np.int) * (-1)
+    _, w = np.unique(min_dis_ind, return_index=True)
+    unique_ind[w] = min_dis_ind[w]
+    return unique_ind
 
 if __name__ == '__main__':
     img_dir = "../exercise4/images/"
     img1 = cv2.imread(img_dir + "img_1.jpg", cv2.IMREAD_GRAYSCALE) / 255
     img2 = cv2.imread(img_dir + "img_2.jpg", cv2.IMREAD_GRAYSCALE) / 255
     h, w = img2.shape
-    img1, img2 = cv2.resize(img1, (w//2, h//2)), cv2.resize(img2, (w//2, h//2))
+    img1, img2 = cv2.resize(img1, (w//5, h//5)), cv2.resize(img2, (w//5, h//5))
     
     Octave = 5
     Scale = 3
@@ -149,14 +157,36 @@ if __name__ == '__main__':
     extrema_locations1 = get_local_extremas(dog_pyramid, DoG_lower_thresh, descriptor_rad)
     descriptors1 = generate_descriptors(Gau_pyramid, extrema_locations1)
     keypoints1 = restore_keypoints_position(extrema_locations1)
-    # TODO: find position of descriptors in origin images
+
+    img1_bgr = cv2.normalize(img1, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8UC1)
+    img1_bgr = cv2.cvtColor(img1_bgr, cv2.COLOR_GRAY2BGR)
+    
 
     Gau_pyramid, dog_pyramid = DoG_pyramid(img2, Octave, Scale, sigma0)
     extrema_locations2 = get_local_extremas(dog_pyramid, DoG_lower_thresh, descriptor_rad)
     descriptors2 = generate_descriptors(Gau_pyramid, extrema_locations2)
     keypoints2 = restore_keypoints_position(extrema_locations2)
+
+    img2_bgr = cv2.normalize(img2, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8UC1)
+    img2_bgr = cv2.cvtColor(img2_bgr, cv2.COLOR_GRAY2BGR)
+    
     
     matches = match_SIFT_descriptors(descriptors1, descriptors2, max_ratio)
+    valid_keypoints = [[], []]
+    for i1, i2 in enumerate(matches):
+        if i2 != -1:
+            valid_keypoints[0].append(i1)
+            valid_keypoints[1].append(i2)
+            x, y = keypoints1[i1]
+            cv2.drawMarker(img1_bgr, (y, x), color=(0, 0, 255))
+            x, y = keypoints2[i2]
+            cv2.drawMarker(img2_bgr, (y, x), color=(0, 0, 255), markerSize=5, thickness=2)
+    cv2.imshow("img1", img1_bgr)
+    cv2.imshow("img2", img2_bgr)
+    cv2.waitKey(0)
+    # out_img = np.array((h, w))
+    # cv2.drawMatches(img1_bgr, valid_keypoints[0], img2, valid_keypoints[1], matches, out_img)
+    # cv2.imshow("res", out_img)
     
     
     
