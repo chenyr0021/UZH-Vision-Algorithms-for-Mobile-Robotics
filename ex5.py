@@ -24,18 +24,22 @@ def get_disparity(left_img, right_img, patch_rad, min_disp, max_disp):
             # plt.show()
             # exit()
             # print(opt_disp)
-        print(i)
+        # print(i)
     return disp
 
 def disparity_to_pointcloud(disp_img, K, baseline, left_img):
     h, w = left_img.shape
     p_left = np.asarray([[i, j, 1] for i in range(h) for j in range(w)])
-    disp_v = np.resize(disp_img, (h*w,))
-    p_right = p_left
+    disp_v = np.reshape(disp_img, (h*w,))
+    p_right = p_left.copy()
     p_right[:, 1] += disp_v
 
     p_left = p_left[disp_v > 0, :]
     p_right = p_right[disp_v > 0, :]
+    # diff = p_right - p_left
+    # print(np.sum(diff))
+    # print(p_left.shape)
+    # print(p_right)
 
     bv_left = np.matmul(np.linalg.inv(K), p_left.T)
     bv_right = np.matmul(np.linalg.inv(K), p_right.T)
@@ -45,7 +49,7 @@ def disparity_to_pointcloud(disp_img, K, baseline, left_img):
 
     for i in range(points.shape[1]):
         A = np.concatenate([bv_left[:, i:i+1], bv_right[:, i:i+1]], axis=1)
-        lambd = np.matmul(np.linalg.pinv(np.matmul(A.T, A)), np.matmul(A.T, b))
+        lambd = np.matmul(np.linalg.inv(np.matmul(A.T, A)), np.matmul(A.T, b))
         points[:, i] = bv_left[:, i] * lambd[0]
 
     return points
@@ -79,8 +83,9 @@ if __name__ == '__main__':
     # cv2.waitKey(0)
 
     P_c = disparity_to_pointcloud(disp, K, baseline, left_img)
-    P_w = np.linalg.inv(np.mat([[0, -1, 0], [0, 0, -1], [1, 0, 0]])) * P_c[:, 0:-1:10]
-    print(P_w)
-    cloud = o3d.geometry.PointCloud(P_w)
-    # cloud.points = P_w.T
+    P_w = np.linalg.inv(np.mat([[0, -1, 0], [0, 0, -1], [1, 0, 0]])) * P_c[:, ::10]
+    print(P_w.T)
+    cloud = o3d.geometry.PointCloud()
+    cloud.points = o3d.utility.Vector3dVector(np.asarray(P_w.T))
+    o3d.visualization.draw_geometries([cloud])
 
