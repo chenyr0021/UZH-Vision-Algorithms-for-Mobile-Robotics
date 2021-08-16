@@ -41,10 +41,10 @@ def read_params_from_txt(K_file, D_file):
 # ex2
 
 def read_K_from_txt(K_file):
-    K = []
+    K = np.eye(3)
     with open(K_file) as f:
-        for line in f.readlines():
-            K.append([float(i) for i in line.strip().split(' ') if i])
+        for i, line in enumerate(f.readlines()):
+            K[i, :] = [float(i) for i in line.strip().split(' ') if i]
     return K
 
 def read_P_w_from_txt(pw_file):
