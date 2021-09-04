@@ -12,9 +12,9 @@ def generate_Q(p_wave, P_w):
     rows = p_wave.shape[0]
     Q = np.zeros((2 * rows, 12))
     Q[::2, [0, 1, 2, 3]] = np.concatenate([P_w, np.ones((rows, 1))], axis=1)
-    Q[::2, [8, 9, 10, 11]] = np.concatenate([P_w, np.ones((rows, 1))], axis=1) * p_wave[:, 0].reshape(12, 1) * (-1)
+    Q[::2, [8, 9, 10, 11]] = np.concatenate([P_w, np.ones((rows, 1))], axis=1) * p_wave[:, 0].reshape(-1, 1) * (-1)
     Q[1::2, [4, 5, 6, 7]] = np.concatenate([P_w, np.ones((rows, 1))], axis=1)
-    Q[1::2, [8, 9, 10, 11]] = np.concatenate([P_w, np.ones((rows, 1))], axis=1) * p_wave[:, 1].reshape(12, 1) * (-1)
+    Q[1::2, [8, 9, 10, 11]] = np.concatenate([P_w, np.ones((rows, 1))], axis=1) * p_wave[:, 1].reshape(-1, 1) * (-1)
     return Q
 
 def estimate_pose_DLT(p, P_w, K):

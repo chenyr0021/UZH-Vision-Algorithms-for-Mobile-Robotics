@@ -24,31 +24,37 @@ def get_disparity(left_img, right_img, patch_rad, min_disp, max_disp):
             # plt.show()
             # exit()
             # print(opt_disp)
-        print(i)
+        # print(i)
     return disp
 
 def disparity_to_pointcloud(disp_img, K, baseline, left_img):
     h, w = left_img.shape
     p_left = np.asarray([[i, j, 1] for i in range(h) for j in range(w)])
-    disp_v = np.resize(disp_img, (h*w,))
-    p_right = p_left
-    p_right[:, 1] += disp_v
+    disp_v = np.reshape(disp_img, (h*w,))
+    p_right = p_left.copy()
+    p_right[:, 1] -= disp_v
 
     p_left = p_left[disp_v > 0, :]
     p_right = p_right[disp_v > 0, :]
+    # diff = p_right - p_left
+    # print(np.sum(diff))
+    # print(p_left.shape)
+    # print(p_right)
 
     bv_left = np.matmul(np.linalg.inv(K), p_left.T)
     bv_right = np.matmul(np.linalg.inv(K), p_right.T)
 
     points = np.zeros(bv_left.shape)
-    b = np.array([[baseline], [0], [0]])
+    intensities = np.zeros(bv_left.shape)
+    b = np.array([[0], [baseline], [0]])
 
     for i in range(points.shape[1]):
-        A = np.concatenate([bv_left[:, i:i+1], bv_right[:, i:i+1]], axis=1)
-        lambd = np.matmul(np.linalg.pinv(np.matmul(A.T, A)), np.matmul(A.T, b))
+        A = np.concatenate([bv_left[:, i:i+1], -bv_right[:, i:i+1]], axis=1)
+        lambd = np.dot(np.linalg.inv(np.dot(A.T, A)), np.dot(A.T, b))
         points[:, i] = bv_left[:, i] * lambd[0]
+        intensities[:, i] = left_img[p_left[i, 0], p_left[i, 1]]
 
-    return points
+    return points, intensities
 
 
 if __name__ == '__main__':
@@ -56,31 +62,35 @@ if __name__ == '__main__':
     patch_radius = 5
     min_disp = 5
     max_disp = 50
-    xlims = [7, 20]
-    ylims = [-6, 10]
-    zlims = [-5, 5]
 
     left_img = cv2.imread("E:\chenyr\Desktop\VSLAM\Exercise 5 - Stereo Dense Reconstruction\data\left\\000000.png", cv2.IMREAD_GRAYSCALE)
     right_img = cv2.imread("E:\chenyr\Desktop\VSLAM\Exercise 5 - Stereo Dense Reconstruction\data\\right\\000000.png", cv2.IMREAD_GRAYSCALE)
     h, w = left_img.shape
-    scale = 5
+    scale = 1
+
     left_img = cv2.resize(left_img, (w//scale, h//scale))
     right_img = cv2.resize(right_img, (w//scale, h//scale))
     K = utils.read_K_from_txt("E:\chenyr\Desktop\VSLAM\Exercise 5 - Stereo Dense Reconstruction\data\K.txt")
-    print(left_img.shape)
-    # K[:2, :] = K[:2, :] / 2
+    K[:2, :] /= scale
 
     disp = get_disparity(left_img, right_img, patch_radius, min_disp, max_disp)
+    normalized_disp = cv2.normalize(disp, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
 
     # for i in range(disp.shape[0]):
     #     print(disp[i])
 
-    # cv2.imshow("disp", disp * 5)
-    # cv2.waitKey(0)
+    cv2.imwrite("disparity_image1.jpg", normalized_disp)
 
-    P_c = disparity_to_pointcloud(disp, K, baseline, left_img)
-    P_w = np.linalg.inv(np.mat([[0, -1, 0], [0, 0, -1], [1, 0, 0]])) * P_c[:, 0:-1:10]
-    print(P_w)
-    cloud = o3d.geometry.PointCloud(P_w)
-    # cloud.points = P_w.T
+    P_c, intensities = disparity_to_pointcloud(disp, K, baseline, left_img)
+    print(intensities)
+    P_w = np.mat([[0, 0, 1], [0, -1, 0], [-1, 0, 0]]) * P_c[:, ::10]
+    # print(P_w.T)
+    cloud = o3d.geometry.PointCloud()
+    cloud.points = o3d.utility.Vector3dVector(np.asarray(P_c.T))
+    cloud.colors = o3d.utility.Vector3dVector(intensities.T/255)
+
+    cv2.imshow("disp", normalized_disp)
+    o3d.io.write_point_cloud("output1.ply", cloud)
+    cv2.waitKey(0)
+    # o3d.visualization.draw_geometries([cloud])
 

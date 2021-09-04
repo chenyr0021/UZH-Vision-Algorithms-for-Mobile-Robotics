@@ -96,7 +96,7 @@ def normalize_2d_points(P):
     return T, P_tilda
 
 def estimate_essential_matrix(P1, P2, K1, K2):
-    F = fundamental_eight_point_normalized(P1, P2)
+    F = fundamental_eight_point(P1, P2)
     E = np.dot(np.dot(K2.T, F), K1)
     return E
 

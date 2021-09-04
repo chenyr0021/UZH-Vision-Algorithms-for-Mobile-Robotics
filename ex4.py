@@ -41,7 +41,10 @@ def DoG_pyramid(src, octave, scale, sigma0):
     dog_pyramid = []
     Gau_pyramid = []
     for o in range(octave):
-        reshaped = cv2.resize(src, (w // np.power(2, o), h // np.power(2, o)))
+        if o == 0:
+            reshaped = cv2.resize(src, (w // np.power(2, o), h // np.power(2, o)))
+        else:
+            reshaped = cv2.resize(Gau_pyramid[-1][-2, :, :], (w // np.power(2, o), h // np.power(2, o)))
         blurred = Guassian_blur_images(reshaped, sigma0, scale)
         Gau_pyramid.append(blurred)
         dog = DoG(blurred)
@@ -132,7 +135,7 @@ def match_SIFT_descriptors(des1, des2, max_ratio):
     
     vice_min_dis = np.min(distance, axis=-1)
     print(min_dis / vice_min_dis)
-    min_dis_ind[min_dis / vice_min_dis > max_ratio] = -1
+    # min_dis_ind[min_dis / vice_min_dis > max_ratio] = -1
     
     unique_ind = np.ones(min_dis_ind.shape, dtype=np.int) * (-1)
     _, w = np.unique(min_dis_ind, return_index=True)
@@ -148,7 +151,7 @@ if __name__ == '__main__':
     
     Octave = 5
     Scale = 3
-    sigma0 = 1.6
+    sigma0 = 1.0
     DoG_lower_thresh = 0.04
     descriptor_rad = 8
     max_ratio = 0.8
@@ -181,16 +184,34 @@ if __name__ == '__main__':
             cv2.drawMarker(img1_bgr, (y, x), color=(0, 0, 255))
             x, y = keypoints2[i2]
             cv2.drawMarker(img2_bgr, (y, x), color=(0, 0, 255), markerSize=5, thickness=2)
-    cv2.imshow("img1", img1_bgr)
-    cv2.imshow("img2", img2_bgr)
-    cv2.waitKey(0)
+    # cv2.imshow("img1", img1_bgr)
+    # cv2.imshow("img2", img2_bgr)
+    # cv2.waitKey(0)
     # out_img = np.array((h, w))
     # cv2.drawMatches(img1_bgr, valid_keypoints[0], img2, valid_keypoints[1], matches, out_img)
     # cv2.imshow("res", out_img)
-    
-    
-    
-    
+
+    sift = cv2.SIFT_create()
+
+    img1 = cv2.imread(img_dir + "img_1.jpg", cv2.IMREAD_GRAYSCALE)
+    img2 = cv2.imread(img_dir + "img_2.jpg", cv2.IMREAD_GRAYSCALE)
+    img1, img2 = cv2.resize(img1, (w // 5, h // 5)), cv2.resize(img2, (w // 5, h // 5))
+    # 计算关键点和特征符
+    kp1, des1 = sift.detectAndCompute(img1, None)
+    kp2, des2 = sift.detectAndCompute(img2, None)
+
+    # BFmatcher with default parms
+    bf = cv2.BFMatcher(cv2.NORM_L2)
+    matches = bf.knnMatch(des1, des2, k=2)
+    # 储存特征向量匹配最好的优质匹配点
+    goodMatchs = []
+    for m, n in matches:
+        if m.distance < 0.7 * n.distance:
+            goodMatchs.append(m)
+
+    pic3 = cv2.drawMatches(img1=img1, keypoints1=kp1, img2=img2, keypoints2=kp2, matches1to2=goodMatchs, outImg=None)
+    cv2.imshow("a", pic3)
+    cv2.waitKey(0)
     
     
     

@@ -41,18 +41,21 @@ def read_params_from_txt(K_file, D_file):
 # ex2
 
 def read_K_from_txt(K_file):
-    K = []
+    K = np.eye(3)
     with open(K_file) as f:
-        for line in f.readlines():
-            K.append([float(i) for i in line.strip().split(' ') if i])
+        for i, line in enumerate(f.readlines()):
+            K[i, :] = [float(i) for i in line.strip().split(' ') if i]
     return K
 
 def read_P_w_from_txt(pw_file):
     P_w = []
     with open(pw_file) as f:
         for line in f.readlines():
-            P_w.append([float(i) for i in line.strip().split(',') if i])
-    return np.asarray(P_w) / 100.
+            if ',' in line:
+                P_w.append([float(i) for i in line.strip().split(',') if i])
+            else:
+                P_w.append([float(i) for i in line.strip().split(' ') if i])
+    return np.asarray(P_w)
 
 def read_p_wave_from_txt(pwave_file):
     p_wave = []
@@ -61,3 +64,10 @@ def read_p_wave_from_txt(pwave_file):
             p_wave.append([float(i) for i in line.strip().split(' ') if i])
     p_wave = np.asarray(p_wave)
     return np.asarray(p_wave).reshape((-1, 12, 2))
+
+def read_keypoints_from_txt(file):
+    p = []
+    with open(file) as f:
+        for line in f.readlines():
+            p.append([int(i) for i in line.strip().split(' ') if i])
+    return np.asarray(p)
